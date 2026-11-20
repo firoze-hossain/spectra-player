@@ -93,6 +93,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut audio_only = false;
     let mut force_res: Option<String> = None;
     let mut fullscreen = false;
+    let mut open_about = false;
+    let mut open_menu: Option<String> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -118,11 +120,20 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--visualizer" => {
                 open_viz = true;
             }
+            "--about" => {
+                open_about = true;
+            }
             "--audio-only" => {
                 audio_only = true;
             }
             "--fullscreen" => {
                 fullscreen = true;
+            }
+            "--menu" => {
+                if i + 1 < args.len() {
+                    i += 1;
+                    open_menu = Some(args[i].clone());
+                }
             }
             "--res" => {
                 if i + 1 < args.len() {
@@ -156,8 +167,24 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if open_viz {
         view.show_visualizer = true;
     }
+    if open_about {
+        view.show_about = true;
+    }
     if fullscreen {
         view.is_fullscreen = true;
+    }
+    if let Some(ref m) = open_menu {
+        match m.to_ascii_lowercase().as_str() {
+            "media" => view.menubar_state.active_menu = Some(0),
+            "playback" => view.menubar_state.active_menu = Some(1),
+            "audio" => view.menubar_state.active_menu = Some(2),
+            "video" => view.menubar_state.active_menu = Some(3),
+            "subtitle" => view.menubar_state.active_menu = Some(4),
+            "tools" => view.menubar_state.active_menu = Some(5),
+            "view" => view.menubar_state.active_menu = Some(6),
+            "help" => view.menubar_state.active_menu = Some(7),
+            _ => view.menubar_state.active_menu = Some(0),
+        }
     }
 
     if let Some(ref res_str) = force_res {
@@ -324,7 +351,7 @@ fn run_x11_gui(mut view: SpectraPlayerView) -> Result<(), Box<dyn std::error::Er
                     let py = btn.event_y as i32;
                     if btn.detail == 1 {
                         mouse_down = true;
-                        view.handle_click(px, py);
+                        view.handle_click(px, py, win_w, win_h);
                     } else if btn.detail == 4 {
                         // Scroll up: Volume up
                         view.engine.audio.set_volume(view.engine.audio.volume + 0.05);
@@ -342,7 +369,7 @@ fn run_x11_gui(mut view: SpectraPlayerView) -> Result<(), Box<dyn std::error::Er
                 Event::MotionNotify(motion) => {
                     let px = motion.event_x as i32;
                     let py = motion.event_y as i32;
-                    view.handle_mouse_move(px, py, mouse_down);
+                    view.handle_mouse_move(px, py, mouse_down, win_w, win_h);
                 }
                 Event::KeyPress(kp) => {
                     if kp.detail == 9 {

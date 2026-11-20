@@ -50,12 +50,12 @@ mod tests {
 
         // Click on play/pause button
         let play_btn = view.bottom_areas.unwrap().play_pause_btn;
-        let clicked = view.handle_click(play_btn.x + 5, play_btn.y + 5);
+        let clicked = view.handle_click(play_btn.x + 5, play_btn.y + 5, 1024, 720);
         assert!(clicked);
         assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Paused);
 
         // Click again to resume
-        view.handle_click(play_btn.x + 5, play_btn.y + 5);
+        view.handle_click(play_btn.x + 5, play_btn.y + 5, 1024, 720);
         assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Playing);
     }
 
@@ -68,12 +68,62 @@ mod tests {
 
         // Click playlist button in top bar
         let pl_btn = view.top_areas.unwrap().playlist_btn;
-        view.handle_click(pl_btn.x + 4, pl_btn.y + 4);
+        view.handle_click(pl_btn.x + 4, pl_btn.y + 4, 800, 600);
         assert!(view.show_playlist);
 
         // Click info button in top bar
         let info_btn = view.top_areas.unwrap().info_btn;
-        view.handle_click(info_btn.x + 4, info_btn.y + 4);
+        view.handle_click(info_btn.x + 4, info_btn.y + 4, 800, 600);
         assert!(view.show_info);
+    }
+
+    #[test]
+    fn test_menubar_and_vlc_dropdown_menus() {
+        let mut view = SpectraPlayerView::new();
+        let mut surface = vec![0u32; 1024 * 720];
+
+        view.render(&mut surface, 1024, 720);
+
+        // 1. Click "Media" (Menu 0) in top bar
+        view.handle_click(12, 10, 1024, 720);
+        assert_eq!(view.menubar_state.active_menu, Some(0));
+
+        // 2. Hover over "Playback" (Menu 1) switches menu automatically
+        view.handle_mouse_move(65, 10, false, 1024, 720);
+        assert_eq!(view.menubar_state.active_menu, Some(1));
+
+        // 3. Click "Audio" menu title (Menu 2)
+        view.handle_click(130, 10, 1024, 720);
+        assert_eq!(view.menubar_state.active_menu, Some(2));
+
+        // 4. Click "Help" menu title (Menu 7)
+        let help_rect = components::menu_bar::MenuBarLayout::new(1024).menu_rects[7];
+        view.handle_click(help_rect.x + 5, help_rect.y + 5, 1024, 720);
+        assert_eq!(view.menubar_state.active_menu, Some(7));
+
+        // 5. Click "About Spectra..." (item 0 in Help dropdown: y: 24 + 4 + 10)
+        view.handle_click(help_rect.x + 20, 24 + 12, 1024, 720);
+        assert!(view.show_about, "Clicking About Spectra should open modal dialog");
+        assert_eq!(view.menubar_state.active_menu, None, "Executing menu action should close dropdown");
+
+        // 6. Close About dialog
+        view.render(&mut surface, 1024, 720);
+        let close_btn = view.about_close_btn.unwrap();
+        view.handle_click(close_btn.x + 5, close_btn.y + 5, 1024, 720);
+        assert!(!view.show_about, "Clicking close on dialog should dismiss it");
+
+        // 7. Test Bottom Bar VLC controls: Stop, Loop, Shuffle, Fullscreen
+        let btm = view.bottom_areas.unwrap();
+        view.handle_click(btm.stop_btn.x + 5, btm.stop_btn.y + 5, 1024, 720);
+        assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Stopped);
+
+        view.handle_click(btm.loop_btn.x + 5, btm.loop_btn.y + 5, 1024, 720);
+        assert!(view.is_looping);
+
+        view.handle_click(btm.shuffle_btn.x + 5, btm.shuffle_btn.y + 5, 1024, 720);
+        assert!(view.is_shuffling);
+
+        view.handle_click(btm.fullscreen_btn.x + 5, btm.fullscreen_btn.y + 5, 1024, 720);
+        assert!(view.is_fullscreen);
     }
 }
