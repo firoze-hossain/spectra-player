@@ -1,6 +1,6 @@
 //! Top navigation bar: title, artist, format/resolution badges, and quick action buttons.
 
-use nova_player_core::types::MediaMetadata;
+use spectra_core::types::MediaMetadata;
 use crate::draw::{draw_rect_outline, fill_rect, fill_rounded_rect};
 use crate::font::{draw_text, measure_text};
 use crate::geom::{Color, Rect};

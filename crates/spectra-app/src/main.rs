@@ -1,13 +1,13 @@
-//! # Nova Player Desktop Application
+//! # Spectra Desktop Application
 //!
-//! High-performance pure-Rust media player for NovaOS and Linux.
+//! High-performance pure-Rust media studio and player for NovaOS and Linux.
 //! Features native X11 GUI, 4K/8K video scaling, 32-band audio spectrum analyzer,
 //! subtitle cues, playlist management, and headless rasterization.
 
 #![allow(unused)]
 
-use nova_player_core::types::{AspectRatio, MediaFormat, Resolution};
-use nova_player_ui::NovaPlayerView;
+use spectra_core::types::{AspectRatio, MediaFormat, Resolution};
+use spectra_ui::SpectraPlayerView;
 use std::env;
 use std::fs::File;
 use std::io::Write;
@@ -42,10 +42,10 @@ fn save_ppm(path: &str, surface: &[u32], width: usize, height: usize) -> std::io
 
 fn print_banner() {
     println!("============================================================");
-    println!("   NOVA PLAYER v1.0.0 (Pure Rust Media Engine)");
+    println!("   SPECTRA v1.0.0 (Ultra-HD Pure Rust Media Studio)");
     println!("   4K UHD & 8K HDR Video • 32-Band Audio Visualizer • Subtitles");
     println!("   MKV • MP4 • WebM • AVI • FLAC • MP3 • WAV • AAC • OGG");
-    println!("   Zero C/C++ • Zero FFmpeg/VLC binaries • Native NovaOS Default");
+    println!("   Zero C/C++ • Zero FFmpeg/VLC binaries • NovaOS Default Player");
     println!("============================================================");
 }
 
@@ -77,7 +77,7 @@ fn print_help() {
     println!("  A                        Cycle Aspect Ratio (Auto, 16:9, 4:3, 21:9, Fill)");
     println!("  S                        Toggle Subtitles [CC]");
     println!("  [ / ]                    Decrease / Increase playback speed");
-    println!("  Q / Esc                  Quit Nova Player");
+    println!("  Q / Esc                  Quit Spectra");
     println!("============================================================");
 }
 
@@ -103,7 +103,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
             "--version" | "-v" => {
-                println!("Nova Player 1.0.0 (Pure-Rust Engine, NovaOS & Linux)");
+                println!("Spectra 1.0.0 (Pure-Rust Engine, NovaOS & Linux)");
                 return Ok(());
             }
             "--headless" => {
@@ -145,7 +145,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         i += 1;
     }
 
-    let mut view = NovaPlayerView::new();
+    let mut view = SpectraPlayerView::new();
 
     if open_info {
         view.show_info = true;
@@ -166,19 +166,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 view.engine.metadata.width = 7680;
                 view.engine.metadata.height = 4320;
                 view.engine.metadata.title = "Deep Space Accretion Disk 8K HDR".to_string();
-                view.engine.video_synth.theme = nova_player_core::codec::video_synth::VideoTheme::DeepSpaceNebula;
+                view.engine.video_synth.theme = spectra_core::codec::video_synth::VideoTheme::DeepSpaceNebula;
             }
             "4k" => {
                 view.engine.metadata.width = 3840;
                 view.engine.metadata.height = 2160;
                 view.engine.metadata.title = "Cyberpunk Metropolis 4K UHD".to_string();
-                view.engine.video_synth.theme = nova_player_core::codec::video_synth::VideoTheme::CyberpunkMetropolis;
+                view.engine.video_synth.theme = spectra_core::codec::video_synth::VideoTheme::CyberpunkMetropolis;
             }
             "1080p" => {
                 view.engine.metadata.width = 1920;
                 view.engine.metadata.height = 1080;
                 view.engine.metadata.title = "Aurora Borealis Ocean Waves 1080p".to_string();
-                view.engine.video_synth.theme = nova_player_core::codec::video_synth::VideoTheme::OceanAurora;
+                view.engine.video_synth.theme = spectra_core::codec::video_synth::VideoTheme::OceanAurora;
             }
             _ => {}
         }
@@ -238,7 +238,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn run_x11_gui(mut view: NovaPlayerView) -> Result<(), Box<dyn std::error::Error>> {
+fn run_x11_gui(mut view: SpectraPlayerView) -> Result<(), Box<dyn std::error::Error>> {
     println!("[NovaPlayer] Connecting to X11 display server...");
     let (conn, screen_num) = x11rb::connect(None)?;
     let screen = &conn.setup().roots[screen_num];
@@ -273,7 +273,7 @@ fn run_x11_gui(mut view: NovaPlayerView) -> Result<(), Box<dyn std::error::Error
     )?;
 
     // Set Window Title
-    let title = "Nova Player - Ultra HD Media & Audio Studio (Pure Rust)";
+    let title = "Spectra - Ultra HD Media & Audio Studio (Pure Rust)";
     conn.change_property8(
         PropMode::REPLACE,
         win_id,

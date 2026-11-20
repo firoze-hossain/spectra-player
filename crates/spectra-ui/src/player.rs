@@ -1,6 +1,6 @@
 //! High-level Nova Player UI coordinator and master renderer.
 
-use nova_player_core::engine::MediaPlayerEngine;
+use spectra_core::engine::MediaPlayerEngine;
 use crate::components::bottom_bar::{render_bottom_bar, BottomBarActionAreas};
 use crate::components::info_overlay::render_info_overlay;
 use crate::components::playlist_view::{render_playlist_drawer, PlaylistClickAreas};
@@ -11,7 +11,7 @@ use crate::font::{draw_text, measure_text};
 use crate::geom::{Color, Rect};
 use crate::scaler::{blit_video_frame, compute_viewport_rect};
 
-pub struct NovaPlayerView {
+pub struct SpectraPlayerView {
     pub engine: MediaPlayerEngine,
     pub is_fullscreen: bool,
     pub show_controls: bool,
@@ -26,7 +26,7 @@ pub struct NovaPlayerView {
     pub info_close_btn: Option<Rect>,
 }
 
-impl Default for NovaPlayerView {
+impl Default for SpectraPlayerView {
     fn default() -> Self {
         Self {
             engine: MediaPlayerEngine::new(),
@@ -44,7 +44,7 @@ impl Default for NovaPlayerView {
     }
 }
 
-impl NovaPlayerView {
+impl SpectraPlayerView {
     pub fn new() -> Self {
         Self::default()
     }

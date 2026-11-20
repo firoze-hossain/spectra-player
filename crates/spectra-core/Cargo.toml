@@ -1,0 +1,14 @@
+[package]
+name = "spectra-core"
+version = "0.1.0"
+edition = "2021"
+authors = ["Md. Firoze Hossain <firoze.hossain@outlook.com>"]
+description = "Spectra pure-Rust high-performance media engine: demuxers (MP4, MKV, WebM, AVI, WAV, MP3, FLAC), audio DSP, 32-band FFT spectrum, and playback pipeline."
+license = "MIT"
+repository = "https://github.com/firoze-hossain/spectra-player"
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]

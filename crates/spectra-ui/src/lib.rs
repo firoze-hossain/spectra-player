@@ -13,13 +13,14 @@ pub mod scaler;
 pub use draw::{draw_circle, draw_line, draw_rect_outline, fill_rect, fill_rounded_rect};
 pub use font::{draw_char, draw_text, measure_text};
 pub use geom::{Color, Rect};
-pub use player::NovaPlayerView;
+pub use player::SpectraPlayerView;
+pub type NovaPlayerView = SpectraPlayerView;
 pub use scaler::{blit_video_frame, compute_viewport_rect};
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use nova_player_core::types::AspectRatio;
+    use spectra_core::types::AspectRatio;
 
     #[test]
     fn test_viewport_aspect_ratio_computation() {
@@ -38,7 +39,7 @@ mod tests {
 
     #[test]
     fn test_player_view_render_and_click_dispatch() {
-        let mut view = NovaPlayerView::new();
+        let mut view = SpectraPlayerView::new();
         let mut surface = vec![0u32; 1024 * 720];
 
         // Render full frame
@@ -51,16 +52,16 @@ mod tests {
         let play_btn = view.bottom_areas.unwrap().play_pause_btn;
         let clicked = view.handle_click(play_btn.x + 5, play_btn.y + 5);
         assert!(clicked);
-        assert_eq!(view.engine.state, nova_player_core::types::PlaybackState::Paused);
+        assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Paused);
 
         // Click again to resume
         view.handle_click(play_btn.x + 5, play_btn.y + 5);
-        assert_eq!(view.engine.state, nova_player_core::types::PlaybackState::Playing);
+        assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Playing);
     }
 
     #[test]
     fn test_playlist_and_info_overlay_toggles() {
-        let mut view = NovaPlayerView::new();
+        let mut view = SpectraPlayerView::new();
         let mut surface = vec![0u32; 800 * 600];
 
         view.render(&mut surface, 800, 600);

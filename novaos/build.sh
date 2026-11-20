@@ -25,7 +25,7 @@ $CC -c "$LIBC/syscall.c" -o syscall.o
 $CC -c "$LIBC/stdlib.c" -o stdlib.o
 $CC -c "$LIBC/string.c" -o string.o
 
-echo "Compiling Nova Player for NovaOS (pure Rust i686)..."
+echo "Compiling Spectra Media Player for NovaOS (pure Rust i686)..."
 RUSTC_CMD="${RUSTC:-rustc}"
 BOOTSTRAP_ENV="RUSTC_BOOTSTRAP=1"
 
@@ -40,11 +40,12 @@ env $BOOTSTRAP_ENV $RUSTC_CMD --edition 2021 -Z unstable-options \
     player.rs
 
 ld -m elf_i386 -Ttext=0x08048000 --entry=_start -static \
-    -o player.elf crt0.o player_main.o syscall.o string.o stdlib.o \
+    -o spectra.elf crt0.o player_main.o syscall.o string.o stdlib.o \
     "$LIBRUST/libcore.rlib" "$LIBRUST/libcompiler_builtins.rlib"
 
 mkdir -p "$NOVAOS_ROOT/tools/fixtures"
-cp player.elf "$NOVAOS_ROOT/tools/fixtures/PLAYER.ELF"
-cp player.elf "$NOVAOS_ROOT/tools/fixtures/NOVAPLAY.ELF"
+cp spectra.elf "$NOVAOS_ROOT/tools/fixtures/SPECTRA.ELF"
+cp spectra.elf "$NOVAOS_ROOT/tools/fixtures/PLAYER.ELF"
+cp spectra.elf "$NOVAOS_ROOT/tools/fixtures/NOVAPLAY.ELF"
 
-echo "✅ Built and installed PLAYER.ELF and NOVAPLAY.ELF into $NOVAOS_ROOT/tools/fixtures/"
+echo "✅ Built and installed SPECTRA.ELF, PLAYER.ELF and NOVAPLAY.ELF into $NOVAOS_ROOT/tools/fixtures/"

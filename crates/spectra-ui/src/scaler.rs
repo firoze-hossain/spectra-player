@@ -1,6 +1,6 @@
 //! Video frame scaler, aspect ratio letterboxer, and viewport blitter.
 
-use nova_player_core::types::{AspectRatio, VideoFrame};
+use spectra_core::types::{AspectRatio, VideoFrame};
 use crate::geom::{Color, Rect};
 use crate::draw::fill_rect;
 

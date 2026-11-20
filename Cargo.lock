@@ -41,26 +41,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
-name = "nova-player-app"
-version = "0.1.0"
-dependencies = [
- "nova-player-core",
- "nova-player-ui",
- "x11rb",
-]
-
-[[package]]
-name = "nova-player-core"
-version = "0.1.0"
-
-[[package]]
-name = "nova-player-ui"
-version = "0.1.0"
-dependencies = [
- "nova-player-core",
-]
-
-[[package]]
 name = "rustix"
 version = "1.1.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -71,6 +51,26 @@ dependencies = [
  "libc",
  "linux-raw-sys",
  "windows-sys",
+]
+
+[[package]]
+name = "spectra-app"
+version = "0.1.0"
+dependencies = [
+ "spectra-core",
+ "spectra-ui",
+ "x11rb",
+]
+
+[[package]]
+name = "spectra-core"
+version = "0.1.0"
+
+[[package]]
+name = "spectra-ui"
+version = "0.1.0"
+dependencies = [
+ "spectra-core",
 ]
 
 [[package]]

@@ -1,6 +1,6 @@
 //! Sliding interactive playlist drawer component.
 
-use nova_player_core::playlist::Playlist;
+use spectra_core::playlist::Playlist;
 use crate::draw::{draw_rect_outline, fill_rect, fill_rounded_rect};
 use crate::font::draw_text;
 use crate::geom::{Color, Rect};

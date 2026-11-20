@@ -1,7 +1,7 @@
 //! 32-band real-time audio spectrum analyzer and vinyl turntable visualizer.
 
-use nova_player_core::codec::audio_dsp::SPECTRUM_BANDS;
-use nova_player_core::types::MediaMetadata;
+use spectra_core::codec::audio_dsp::SPECTRUM_BANDS;
+use spectra_core::types::MediaMetadata;
 use crate::draw::{draw_circle, fill_rect, fill_rounded_rect};
 use crate::font::{draw_text, measure_text};
 use crate::geom::{Color, Rect};

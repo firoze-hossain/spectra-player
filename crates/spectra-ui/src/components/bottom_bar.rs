@@ -1,6 +1,6 @@
 //! Bottom player control island: scrub seek bar, transport, volume, speed, and track selectors.
 
-use nova_player_core::types::{AspectRatio, PlaybackState};
+use spectra_core::types::{AspectRatio, PlaybackState};
 use crate::draw::{draw_circle, draw_rect_outline, fill_rect, fill_rounded_rect};
 use crate::font::{draw_text, measure_text};
 use crate::geom::{Color, Rect};

@@ -1,6 +1,6 @@
 //! Media Info & Codec Inspector ("Stats for Nerds") overlay.
 
-use nova_player_core::types::{AspectRatio, MediaMetadata};
+use spectra_core::types::{AspectRatio, MediaMetadata};
 use crate::draw::{draw_rect_outline, fill_rounded_rect};
 use crate::font::draw_text;
 use crate::geom::{Color, Rect};
