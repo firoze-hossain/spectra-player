@@ -1,7 +1,7 @@
 //! # Spectra Desktop Application
 //!
-//! High-performance pure-Rust media studio and player for NovaOS and Linux.
-//! Features native X11 GUI, 4K/8K video scaling, 32-band audio spectrum analyzer,
+//! High-performance pure-Rust media studio and player for NovaOS, macOS, Linux, and Windows.
+//! Features native cross-platform GUI, 4K/8K video scaling, 32-band audio spectrum analyzer,
 //! subtitle cues, playlist management, and headless rasterization.
 
 #![allow(unused)]
@@ -12,17 +12,10 @@ use std::env;
 use std::fs::File;
 use std::io::Write;
 
-use x11rb::connection::Connection;
-use x11rb::protocol::xproto::{
-    AtomEnum, CreateWindowAux, CreateGCAux, EventMask, Gcontext, ImageFormat,
-    KeyButMask, PropMode, Window, WindowClass, ConnectionExt as _,
-};
-use x11rb::protocol::Event;
-use x11rb::wrapper::ConnectionExt as _;
+use minifb::{Key, KeyRepeat, MouseButton, MouseMode, Window, WindowOptions};
 
 const DEFAULT_WIDTH: usize = 1024;
 const DEFAULT_HEIGHT: usize = 720;
-const LINES_PER_CHUNK: usize = 16;
 
 fn save_ppm(path: &str, surface: &[u32], width: usize, height: usize) -> std::io::Result<()> {
     let mut f = File::create(path)?;
@@ -45,13 +38,14 @@ fn print_banner() {
     println!("   SPECTRA v1.0.0 (Ultra-HD Pure Rust Media Studio)");
     println!("   4K UHD & 8K HDR Video • 32-Band Audio Visualizer • Subtitles");
     println!("   MKV • MP4 • WebM • AVI • FLAC • MP3 • WAV • AAC • OGG");
-    println!("   Zero C/C++ • Zero FFmpeg/VLC binaries • NovaOS Default Player");
+    println!("   Zero C/C++ • Zero FFmpeg/VLC binaries • Cross-Platform");
+    println!("   macOS • Linux • Windows • NovaOS Default Media Player");
     println!("============================================================");
 }
 
 fn print_help() {
     print_banner();
-    println!("Usage: nova-player [OPTIONS] [FILE]");
+    println!("Usage: spectra [OPTIONS] [FILE]");
     println!();
     println!("Options:");
     println!("  --help, -h               Print this help message");
@@ -105,11 +99,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 return Ok(());
             }
             "--version" | "-v" => {
-                println!("Spectra 1.0.0 (Pure-Rust Engine, NovaOS & Linux)");
+                println!("Spectra 1.0.0 (Pure-Rust Engine, Cross-Platform Desktop & NovaOS)");
                 return Ok(());
-            }
-            "--headless" => {
-                headless = true;
             }
             "--info" => {
                 open_info = true;
@@ -120,38 +111,40 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "--visualizer" => {
                 open_viz = true;
             }
-            "--about" => {
-                open_about = true;
-            }
             "--audio-only" => {
                 audio_only = true;
             }
             "--fullscreen" => {
                 fullscreen = true;
             }
+            "--headless" => {
+                headless = true;
+            }
+            "--about" => {
+                open_about = true;
+            }
             "--menu" => {
                 if i + 1 < args.len() {
+                    open_menu = Some(args[i + 1].clone());
                     i += 1;
-                    open_menu = Some(args[i].clone());
                 }
             }
             "--res" => {
                 if i + 1 < args.len() {
+                    force_res = Some(args[i + 1].clone());
                     i += 1;
-                    force_res = Some(args[i].clone());
                 }
             }
             "--screenshot" => {
                 if i + 1 < args.len() {
+                    screenshot_path = Some(args[i + 1].clone());
                     i += 1;
-                    screenshot_path = Some(args[i].clone());
                 }
             }
-            other => {
-                if !other.starts_with('-') {
-                    initial_file = Some(other.to_string());
-                }
+            path if !path.starts_with("--") => {
+                initial_file = Some(path.to_string());
             }
+            _ => {}
         }
         i += 1;
     }
@@ -167,11 +160,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if open_viz {
         view.show_visualizer = true;
     }
-    if open_about {
-        view.show_about = true;
-    }
     if fullscreen {
         view.is_fullscreen = true;
+    }
+    if open_about {
+        view.show_about = true;
     }
     if let Some(ref m) = open_menu {
         match m.to_ascii_lowercase().as_str() {
@@ -183,7 +176,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             "tools" => view.menubar_state.active_menu = Some(5),
             "view" => view.menubar_state.active_menu = Some(6),
             "help" => view.menubar_state.active_menu = Some(7),
-            _ => view.menubar_state.active_menu = Some(0),
+            _ => {}
         }
     }
 
@@ -222,14 +215,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(ref path) = initial_file {
         if let Ok(bytes) = std::fs::read(path) {
             view.engine.load_file(path, &bytes);
-            println!("[NovaPlayer] Loaded media file: {} ({} bytes)", path, bytes.len());
+            println!("[Spectra] Loaded media file: {} ({} bytes)", path, bytes.len());
         }
     }
 
     // Headless or screenshot rendering mode
     if headless || screenshot_path.is_some() {
         print_banner();
-        println!("[NovaPlayer] Executing headless render pipeline (1024x720)...");
+        println!("[Spectra] Executing headless render pipeline (1024x720)...");
         let mut surface = vec![0u32; DEFAULT_WIDTH * DEFAULT_HEIGHT];
 
         // Advance 1.5 seconds to showcase active video, spectrum, and subtitle cue
@@ -243,7 +236,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 path.clone()
             };
             save_ppm(&ppm_path, &surface, DEFAULT_WIDTH, DEFAULT_HEIGHT)?;
-            println!("[NovaPlayer] Screenshot saved to PPM: {}", ppm_path);
+            println!("[Spectra] Screenshot saved to PPM: {}", ppm_path);
 
             if path.ends_with(".png") {
                 let py_cmd = format!("from PIL import Image; Image.open('{}').save('{}')", ppm_path, path);
@@ -252,235 +245,130 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     .arg(&py_cmd)
                     .output();
                 let _ = std::fs::remove_file(&ppm_path);
-                println!("[NovaPlayer] Converted screenshot to PNG via PIL: {}", path);
+                println!("[Spectra] Converted screenshot to PNG via PIL: {}", path);
             }
         }
-        println!("[NovaPlayer] Headless verification completed successfully.");
+        println!("[Spectra] Headless verification completed successfully.");
         return Ok(());
     }
 
-    // Native X11 Interactive GUI Runner
+    // Native Cross-Platform Desktop GUI Runner (macOS, Linux, Windows)
     print_banner();
-    run_x11_gui(view)?;
+    run_desktop_gui(view)?;
     Ok(())
 }
 
-fn run_x11_gui(mut view: SpectraPlayerView) -> Result<(), Box<dyn std::error::Error>> {
-    println!("[NovaPlayer] Connecting to X11 display server...");
-    let (conn, screen_num) = x11rb::connect(None)?;
-    let screen = &conn.setup().roots[screen_num];
+fn run_headless(view: &mut SpectraPlayerView) {
+    println!("[Spectra] Executing headless render pipeline (1024x720)...");
+    let mut surface = vec![0u32; DEFAULT_WIDTH * DEFAULT_HEIGHT];
+    view.tick(1500);
+    view.render(&mut surface, DEFAULT_WIDTH, DEFAULT_HEIGHT);
+    let non_zero = surface.iter().filter(|&&p| p != 0).count();
+    println!("[Spectra] Headless verification completed. Rendered {} non-zero pixels.", non_zero);
+}
 
+fn run_desktop_gui(mut view: SpectraPlayerView) -> Result<(), Box<dyn std::error::Error>> {
     let mut win_w = DEFAULT_WIDTH;
     let mut win_h = DEFAULT_HEIGHT;
 
-    let win_id = conn.generate_id()?;
-    let event_mask = EventMask::EXPOSURE
-        | EventMask::KEY_PRESS
-        | EventMask::BUTTON_PRESS
-        | EventMask::BUTTON_RELEASE
-        | EventMask::POINTER_MOTION
-        | EventMask::STRUCTURE_NOTIFY;
+    let mut window = match Window::new(
+        "Spectra - Ultra HD Media Studio & Player (Pure Rust Engine)",
+        win_w,
+        win_h,
+        WindowOptions {
+            resize: true,
+            ..WindowOptions::default()
+        },
+    ) {
+        Ok(w) => w,
+        Err(e) => {
+            eprintln!("[Spectra] Note: Could not open native window ({}). Running headless fallback.", e);
+            run_headless(&mut view);
+            return Ok(());
+        }
+    };
 
-    let win_aux = CreateWindowAux::new()
-        .background_pixel(screen.black_pixel)
-        .event_mask(event_mask);
-
-    conn.create_window(
-        screen.root_depth,
-        win_id,
-        screen.root,
-        100,
-        100,
-        win_w as u16,
-        win_h as u16,
-        0,
-        WindowClass::INPUT_OUTPUT,
-        screen.root_visual,
-        &win_aux,
-    )?;
-
-    // Set Window Title
-    let title = "Spectra - Ultra HD Media & Audio Studio (Pure Rust)";
-    conn.change_property8(
-        PropMode::REPLACE,
-        win_id,
-        AtomEnum::WM_NAME,
-        AtomEnum::STRING,
-        title.as_bytes(),
-    )?;
-
-    // Request WM_DELETE_WINDOW protocol
-    let wm_protocols = conn.intern_atom(false, b"WM_PROTOCOLS")?.reply()?.atom;
-    let wm_delete_window = conn.intern_atom(false, b"WM_DELETE_WINDOW")?.reply()?.atom;
-    conn.change_property32(
-        PropMode::REPLACE,
-        win_id,
-        wm_protocols,
-        AtomEnum::ATOM,
-        &[wm_delete_window],
-    )?;
-
-    let gc_id = conn.generate_id()?;
-    conn.create_gc(gc_id, win_id, &CreateGCAux::new())?;
-
-    conn.map_window(win_id)?;
-    conn.flush()?;
-
-    println!("[NovaPlayer] Native desktop window created ({}x{}). Responsive auto-adjust enabled.", win_w, win_h);
+    window.set_target_fps(60);
+    println!("[Spectra] Native cross-platform desktop window created ({}x{}).", win_w, win_h);
 
     let mut surface = vec![0u32; win_w * win_h];
     let mut mouse_down = false;
-    let mut running = true;
     let mut last_tick = std::time::Instant::now();
 
-    while running {
-        // Handle incoming X11 events
-        while let Some(event) = conn.poll_for_event()? {
-            match event {
-                Event::ConfigureNotify(cfg) => {
-                    let nw = cfg.width as usize;
-                    let nh = cfg.height as usize;
-                    if nw > 0 && nh > 0 && (nw != win_w || nh != win_h) {
-                        win_w = nw;
-                        win_h = nh;
-                        surface.resize(win_w * win_h, 0);
-                    }
+    while window.is_open() && !window.is_key_down(Key::Escape) && !window.is_key_down(Key::Q) {
+        // 1. Dynamic Window Resizing
+        let (cur_w, cur_h) = window.get_size();
+        if (cur_w != win_w || cur_h != win_h) && cur_w >= 320 && cur_h >= 240 {
+            win_w = cur_w;
+            win_h = cur_h;
+            surface = vec![0u32; win_w * win_h];
+        }
+
+        // 2. Mouse Input Handling
+        if let Some((mx, my)) = window.get_mouse_pos(MouseMode::Discard) {
+            let px = mx as i32;
+            let py = my as i32;
+            let is_down = window.get_mouse_down(MouseButton::Left);
+
+            if is_down && !mouse_down {
+                mouse_down = true;
+                view.handle_click(px, py, win_w, win_h);
+            } else if !is_down && mouse_down {
+                mouse_down = false;
+                view.handle_mouse_up();
+            } else {
+                view.handle_mouse_move(px, py, mouse_down, win_w, win_h);
+            }
+        }
+
+        // 3. Scroll Wheel (Volume control)
+        if let Some((_sx, sy)) = window.get_scroll_wheel() {
+            if sy > 0.0 {
+                view.engine.audio.set_volume(view.engine.audio.volume + 0.05);
+            } else if sy < 0.0 {
+                view.engine.audio.set_volume(view.engine.audio.volume - 0.05);
+            }
+        }
+
+        // 4. Keyboard Shortcuts
+        for key in window.get_keys_pressed(KeyRepeat::Yes) {
+            match key {
+                Key::Space => view.handle_key(32),
+                Key::F => view.handle_key(102),
+                Key::M => view.handle_key(109),
+                Key::V => view.handle_key(118),
+                Key::I => view.handle_key(105),
+                Key::L => view.handle_key(108),
+                Key::A => view.handle_key(97),
+                Key::S => view.handle_key(115),
+                Key::Left => view.handle_key(0xFF51),
+                Key::Right => view.handle_key(0xFF53),
+                Key::Up => view.handle_key(0xFF52),
+                Key::Down => view.handle_key(0xFF54),
+                Key::LeftBracket => {
+                    let cur_speed = view.engine.speed;
+                    view.engine.speed = (cur_speed - 0.25).max(0.25);
                 }
-                Event::ButtonPress(btn) => {
-                    let px = btn.event_x as i32;
-                    let py = btn.event_y as i32;
-                    if btn.detail == 1 {
-                        mouse_down = true;
-                        view.handle_click(px, py, win_w, win_h);
-                    } else if btn.detail == 4 {
-                        // Scroll up: Volume up
-                        view.engine.audio.set_volume(view.engine.audio.volume + 0.05);
-                    } else if btn.detail == 5 {
-                        // Scroll down: Volume down
-                        view.engine.audio.set_volume(view.engine.audio.volume - 0.05);
-                    }
-                }
-                Event::ButtonRelease(btn) => {
-                    if btn.detail == 1 {
-                        mouse_down = false;
-                        view.handle_mouse_up();
-                    }
-                }
-                Event::MotionNotify(motion) => {
-                    let px = motion.event_x as i32;
-                    let py = motion.event_y as i32;
-                    view.handle_mouse_move(px, py, mouse_down, win_w, win_h);
-                }
-                Event::KeyPress(kp) => {
-                    if kp.detail == 9 {
-                        // Escape: Quit
-                        running = false;
-                    } else if kp.detail == 65 {
-                        // Space
-                        view.handle_key(32);
-                    } else if kp.detail == 41 {
-                        // 'f' Fullscreen
-                        view.handle_key(102);
-                    } else if kp.detail == 58 {
-                        // 'm' Mute
-                        view.handle_key(109);
-                    } else if kp.detail == 55 {
-                        // 'v' Viz
-                        view.handle_key(118);
-                    } else if kp.detail == 31 {
-                        // 'i' Info
-                        view.handle_key(105);
-                    } else if kp.detail == 46 {
-                        // 'l' Playlist
-                        view.handle_key(108);
-                    } else if kp.detail == 38 {
-                        // 'a' Aspect
-                        view.handle_key(97);
-                    } else if kp.detail == 39 {
-                        // 's' Subtitles
-                        view.handle_key(115);
-                    } else if kp.detail == 113 {
-                        // Left arrow
-                        view.handle_key(0xFF51);
-                    } else if kp.detail == 114 {
-                        // Right arrow
-                        view.handle_key(0xFF53);
-                    } else if kp.detail == 111 {
-                        // Up arrow
-                        view.handle_key(0xFF52);
-                    } else if kp.detail == 116 {
-                        // Down arrow
-                        view.handle_key(0xFF54);
-                    }
-                }
-                Event::ClientMessage(msg) => {
-                    if msg.data.as_data32()[0] == wm_delete_window {
-                        running = false;
-                    }
+                Key::RightBracket => {
+                    let cur_speed = view.engine.speed;
+                    view.engine.speed = (cur_speed + 0.25).min(4.0);
                 }
                 _ => {}
             }
         }
 
-        // Advance simulation tick at ~60fps
+        // 5. Advance simulation tick at ~60fps
         let now = std::time::Instant::now();
         let elapsed = now.duration_since(last_tick);
         let delta_ms = elapsed.as_millis().max(1) as u64;
         last_tick = now;
-
         view.tick(delta_ms);
 
-        // Render full frame
+        // 6. Render frame & update window buffer
         view.render(&mut surface, win_w, win_h);
-
-        // Blit chunks to X11 surface
-        blit_surface_to_x11(&conn, win_id, gc_id, &surface, win_w, win_h)?;
-        conn.flush()?;
-
-        // Pacing: sleep 16ms for smooth 60fps
-        std::thread::sleep(std::time::Duration::from_millis(16));
+        window.update_with_buffer(&surface, win_w, win_h)?;
     }
 
-    println!("[NovaPlayer] Session ended cleanly.");
-    Ok(())
-}
-
-fn blit_surface_to_x11(
-    conn: &impl Connection,
-    window: Window,
-    gc: Gcontext,
-    surface: &[u32],
-    width: usize,
-    height: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
-    let mut y = 0;
-    while y < height {
-        let chunk_lines = (height - y).min(LINES_PER_CHUNK);
-        let start = y * width;
-        let count = chunk_lines * width;
-        let slice = &surface[start..start + count];
-
-        let mut byte_data = Vec::with_capacity(count * 4);
-        for &p in slice {
-            byte_data.push((p & 0xFF) as u8);
-            byte_data.push(((p >> 8) & 0xFF) as u8);
-            byte_data.push(((p >> 16) & 0xFF) as u8);
-            byte_data.push(0);
-        }
-
-        conn.put_image(
-            ImageFormat::Z_PIXMAP,
-            window,
-            gc,
-            width as u16,
-            chunk_lines as u16,
-            0,
-            y as i16,
-            0,
-            24,
-            &byte_data,
-        )?;
-        y += chunk_lines;
-    }
+    println!("[Spectra] Session ended cleanly.");
     Ok(())
 }

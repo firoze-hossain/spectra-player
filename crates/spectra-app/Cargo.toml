@@ -18,4 +18,4 @@ std = ["spectra-core/std", "spectra-ui/std"]
 [dependencies]
 spectra-core = { path = "../spectra-core", default-features = false }
 spectra-ui = { path = "../spectra-ui", default-features = false }
-x11rb = "0.14.0"
+minifb = "0.29.0"
