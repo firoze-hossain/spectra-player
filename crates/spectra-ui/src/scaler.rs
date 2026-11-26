@@ -127,26 +127,33 @@ pub fn blit_video_frame(
             surface[dst_start..dst_start + copy_len].copy_from_slice(&src_row[..copy_len]);
         }
     } else {
-        // Fast fixed-point scaling (handles zoom-crop negative viewport offsets cleanly too)
+        // Zero-allocation fast fixed-point scaling (stack LUT up to 4096px wide)
         let x_ratio = ((src_w << 16) / dst_w.max(1)) as u32;
         let y_ratio = ((src_h << 16) / dst_h.max(1)) as u32;
 
-        // Precompute src_x table for row loop speed
         let vis_w = x1 - x0;
-        let mut src_x_tbl = Vec::with_capacity(vis_w);
-        for x in x0..x1 {
+        let mut stack_lut = [0usize; 4096];
+        let mut heap_lut: Vec<usize>;
+        let src_x_tbl: &mut [usize] = if vis_w <= stack_lut.len() {
+            &mut stack_lut[..vis_w]
+        } else {
+            heap_lut = vec![0usize; vis_w];
+            &mut heap_lut
+        };
+        for (idx, x) in (x0..x1).enumerate() {
             let dst_x_rel = (x as i32 - viewport.x).max(0) as u32;
             let sx = ((dst_x_rel * x_ratio) >> 16) as usize;
-            src_x_tbl.push(sx.min(src_w - 1));
+            src_x_tbl[idx] = sx.min(src_w - 1);
         }
 
+        let sw_usize = surface_w as usize;
         for y in y0..y1 {
             let dst_y_rel = (y as i32 - viewport.y).max(0) as u32;
             let src_y = (((dst_y_rel * y_ratio) >> 16) as usize).min(src_h - 1);
             let src_row = &frame.buffer[src_y * src_w..(src_y + 1) * src_w];
-            let dst_row = &mut surface[y * surface_w as usize + x0..y * surface_w as usize + x1];
-            for (dx, &sx) in src_x_tbl.iter().enumerate() {
-                dst_row[dx] = src_row[sx];
+            let dst_row = &mut surface[y * sw_usize + x0..y * sw_usize + x1];
+            for (dst_px, &sx) in dst_row.iter_mut().zip(src_x_tbl.iter()) {
+                *dst_px = unsafe { *src_row.get_unchecked(sx) };
             }
         }
     }

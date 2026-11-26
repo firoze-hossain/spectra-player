@@ -17,10 +17,11 @@ use crate::codec::media_backend::{
     discover_sidecar_subtitles, extract_embedded_subtitle, find_ffmpeg_bin, mp4_has_avc1,
     probe_media, save_frame_png, spawn_ffmpeg_downloader, ActiveMediaSession, CodecStatus,
 };
+use std::sync::Arc;
 #[cfg(feature = "std")]
 use std::path::Path;
 #[cfg(feature = "std")]
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 
 pub struct MediaPlayerEngine {
     pub metadata: MediaMetadata,
@@ -81,7 +82,7 @@ impl Default for MediaPlayerEngine {
             measured_fps: 0.0,
             dropped_frames: 0,
             total_rendered_frames: 0,
-            max_decode_width: 1920,
+            max_decode_width: 1280,
             last_status_msg: None,
             #[cfg(feature = "std")]
             session: None,
@@ -123,15 +124,19 @@ impl MediaPlayerEngine {
             if let Some(ref mut sess) = self.session {
                 if sess.has_audio_stream && !sess.audio_shared.eof.load(std::sync::atomic::Ordering::Acquire) {
                     let audio_ms = sess.audio_shared.current_audio_ms();
-                    if audio_ms > self.position_ms || self.position_ms == 0 {
+                    if audio_ms > self.position_ms {
                         self.position_ms = audio_ms;
-                    } else {
-                        self.position_ms += (delta_ms as f32 * self.speed) as u64;
+                    } else if audio_ms > 0 {
+                        // Gently interpolate between audio callbacks without ever drifting > 20ms ahead
+                        let cap = audio_ms + 20;
+                        let step = (delta_ms as f32 * self.speed) as u64;
+                        self.position_ms = (self.position_ms + step).min(cap);
                     }
                 } else {
                     self.position_ms += (delta_ms as f32 * self.speed) as u64;
                 }
 
+                // Pace video at actual clock without artificial ahead jump
                 let (_, dropped) = sess.advance_video_to(self.position_ms);
                 self.dropped_frames += dropped;
 
@@ -768,8 +773,8 @@ impl MediaPlayerEngine {
         Ok(out_path.to_string_lossy().to_string())
     }
 
-    /// Returns current decoded video frame if playing live video, or None in standby/audio-only mode.
-    pub fn current_video_frame(&self, target_w: u32, target_h: u32) -> Option<VideoFrame> {
+    /// Returns current decoded video frame zero-copy (Arc<VideoFrame>), or None in standby/audio-only.
+    pub fn current_video_frame(&self, target_w: u32, target_h: u32) -> Option<Arc<VideoFrame>> {
         if !self.metadata.is_live_file || self.metadata.format.is_audio_only() {
             return None;
         }
@@ -780,17 +785,17 @@ impl MediaPlayerEngine {
         #[cfg(feature = "std")]
         if let Some(ref sess) = self.session {
             if let Some(ref decoded) = sess.latest_frame {
-                let mut frame = decoded.clone();
                 if self.video_synth.adjustments.has_color_effects()
                     || self.video_synth.adjustments.has_geometry_effects()
                 {
+                    let mut frame = (**decoded).clone();
                     self.video_synth.adjustments.apply_to_frame(&mut frame);
+                    return Some(Arc::new(frame));
                 }
-                return Some(frame);
+                return Some(Arc::clone(decoded));
             }
-            // While first frame is buffering for live file, return sleek blank frame
             if sess.has_video_stream {
-                return Some(VideoFrame::new(target_w.max(2), target_h.max(2), self.position_ms));
+                return Some(Arc::new(VideoFrame::new(target_w.max(2), target_h.max(2), self.position_ms)));
             }
         }
 

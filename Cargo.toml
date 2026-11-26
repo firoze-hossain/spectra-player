@@ -12,3 +12,6 @@ edition = "2021"
 authors = ["Md. Firoze Hossain <firoze.hossain@outlook.com>"]
 license = "MIT"
 repository = "https://github.com/firoze-hossain/spectra-player"
+
+[profile.dev]
+opt-level = 2

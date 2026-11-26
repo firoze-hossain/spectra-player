@@ -22,8 +22,8 @@ use crate::types::{
 };
 
 pub const TARGET_AUDIO_RATE: u32 = 48000;
-const AUDIO_RING_MAX_FRAMES: usize = 48000 / 2; // 500ms buffer
-const VIDEO_QUEUE_MAX_FRAMES: usize = 8;
+const AUDIO_RING_MAX_FRAMES: usize = 48000; // 1.0s smooth audio buffer
+const VIDEO_QUEUE_MAX_FRAMES: usize = 30; // ~1.0s smooth lookahead buffer
 
 #[derive(Debug, Clone)]
 pub enum CodecStatus {
@@ -476,9 +476,18 @@ fn probe_with_ffprobe(ffprobe: &Path, path: &str, base: &MediaMetadata) -> Optio
             "pix_fmt" if in_stream => cur.pix_fmt = v.to_string(),
             "sample_rate" if in_stream => cur.sample_rate = v.parse().unwrap_or(48000),
             "channels" if in_stream => cur.channels = v.parse().unwrap_or(2),
-            "avg_frame_rate" | "r_frame_rate" if in_stream => {
+            "avg_frame_rate" if in_stream => {
+                let parsed = parse_rate_fraction(v);
+                if parsed >= 1.0 && parsed <= 240.0 {
+                    cur.fps = parsed;
+                }
+            }
+            "r_frame_rate" if in_stream => {
                 if cur.fps == 0.0 {
-                    cur.fps = parse_rate_fraction(v);
+                    let parsed = parse_rate_fraction(v);
+                    if parsed >= 1.0 && parsed <= 240.0 {
+                        cur.fps = parsed;
+                    }
                 }
             }
             "TAG:language" if in_stream => cur.lang = v.to_string(),
@@ -892,8 +901,9 @@ pub struct ActiveMediaSession {
     pub path: String,
     pub metadata: MediaMetadata,
     pub audio_shared: Arc<AudioSharedBuffer>,
-    pub video_queue: Arc<Mutex<VecDeque<VideoFrame>>>,
-    pub latest_frame: Option<VideoFrame>,
+    pub video_queue: Arc<Mutex<VecDeque<Arc<VideoFrame>>>>,
+    pub frame_pool: Arc<Mutex<Vec<Vec<u32>>>>,
+    pub latest_frame: Option<Arc<VideoFrame>>,
     pub generation: Arc<AtomicU64>,
     pub active_audio_track: Option<usize>,
     pub has_audio_stream: bool,
@@ -974,6 +984,7 @@ impl ActiveMediaSession {
         audio_shared.is_playing.store(true, Ordering::Release);
 
         let video_queue = Arc::new(Mutex::new(VecDeque::with_capacity(VIDEO_QUEUE_MAX_FRAMES)));
+        let frame_pool = Arc::new(Mutex::new(Vec::with_capacity(VIDEO_QUEUE_MAX_FRAMES + 4)));
         let video_eof = Arc::new(AtomicBool::new(false));
         let last_error = Arc::new(Mutex::new(None));
 
@@ -1044,12 +1055,12 @@ impl ActiveMediaSession {
                     })
                     .collect();
                 if let Ok(mut q) = video_queue.lock() {
-                    q.push_back(VideoFrame {
+                    q.push_back(Arc::new(VideoFrame {
                         width: iw,
                         height: ih,
                         timestamp_ms: 0,
                         buffer: pixels,
-                    });
+                    }));
                 }
             }
             video_eof.store(true, Ordering::Release);
@@ -1071,6 +1082,7 @@ impl ActiveMediaSession {
                     dec_h,
                     metadata.fps.max(1.0),
                     Arc::clone(&video_queue),
+                    Arc::clone(&frame_pool),
                     Arc::clone(&video_eof),
                     Arc::clone(&generation),
                     1,
@@ -1109,6 +1121,7 @@ impl ActiveMediaSession {
             metadata,
             audio_shared,
             video_queue,
+            frame_pool,
             latest_frame: None,
             generation,
             active_audio_track: audio_track,
@@ -1129,9 +1142,13 @@ impl ActiveMediaSession {
         self.audio_shared.clear_for_seek(seek_ms);
         self.audio_shared.speed_bits.store(speed.to_bits(), Ordering::Release);
         if let Ok(mut q) = self.video_queue.lock() {
-            q.clear();
+            while let Some(f) = q.pop_front() {
+                recycle_frame_arc(f, &self.frame_pool);
+            }
         }
-        self.latest_frame = None;
+        if let Some(old) = self.latest_frame.take() {
+            recycle_frame_arc(old, &self.frame_pool);
+        }
         self.video_eof.store(false, Ordering::Release);
         self.active_audio_track = audio_track;
         if let Ok(mut er) = self.last_error.lock() {
@@ -1197,6 +1214,7 @@ impl ActiveMediaSession {
                     dec_h,
                     self.metadata.fps.max(1.0),
                     Arc::clone(&self.video_queue),
+                    Arc::clone(&self.frame_pool),
                     Arc::clone(&self.video_eof),
                     Arc::clone(&self.generation),
                     gen_val,
@@ -1218,18 +1236,20 @@ impl ActiveMediaSession {
         }
     }
 
-    /// Pops frames up to `target_ms` and updates `latest_frame`. Returns (advanced, dropped_count).
+    /// Pops frames up to `target_ms` and updates `latest_frame`, recycling old buffers zero-alloc.
     pub fn advance_video_to(&mut self, target_ms: u64) -> (bool, u64) {
         let mut updated = false;
         let mut dropped = 0u64;
         if let Ok(mut q) = self.video_queue.lock() {
             while let Some(front) = q.front() {
-                if front.timestamp_ms <= target_ms + 18 {
+                if front.timestamp_ms <= target_ms + 12 {
                     let f = q.pop_front().unwrap();
                     if self.latest_frame.is_some() && front_behind(&f, target_ms) {
                         dropped += 1;
                     }
-                    self.latest_frame = Some(f);
+                    if let Some(old) = self.latest_frame.replace(f) {
+                        recycle_frame_arc(old, &self.frame_pool);
+                    }
                     updated = true;
                 } else {
                     break;
@@ -1243,11 +1263,23 @@ impl ActiveMediaSession {
         if let Ok(mut q) = self.video_queue.lock() {
             if let Some(f) = q.pop_front() {
                 let ts = f.timestamp_ms;
-                self.latest_frame = Some(f);
+                if let Some(old) = self.latest_frame.replace(f) {
+                    recycle_frame_arc(old, &self.frame_pool);
+                }
                 return Some(ts);
             }
         }
         None
+    }
+}
+
+fn recycle_frame_arc(frame_arc: Arc<VideoFrame>, pool: &Mutex<Vec<Vec<u32>>>) {
+    if let Ok(vf) = Arc::try_unwrap(frame_arc) {
+        if let Ok(mut p) = pool.lock() {
+            if p.len() < VIDEO_QUEUE_MAX_FRAMES + 4 {
+                p.push(vf.buffer);
+            }
+        }
     }
 }
 
@@ -1611,11 +1643,12 @@ fn spawn_ffmpeg_video_thread(
     ffmpeg: PathBuf,
     path: String,
     seek_ms: u64,
-    speed: f32,
+    _speed: f32,
     dec_w: u32,
     dec_h: u32,
     fps: f32,
-    video_queue: Arc<Mutex<VecDeque<VideoFrame>>>,
+    video_queue: Arc<Mutex<VecDeque<Arc<VideoFrame>>>>,
+    frame_pool: Arc<Mutex<Vec<Vec<u32>>>>,
     video_eof: Arc<AtomicBool>,
     gen: Arc<AtomicU64>,
     my_gen: u64,
@@ -1624,12 +1657,22 @@ fn spawn_ffmpeg_video_thread(
     thread::spawn(move || {
         let mut cmd = Command::new(ffmpeg);
         hide_window_cmd(&mut cmd);
-        cmd.args(["-hide_banner", "-loglevel", "error"]);
+        cmd.args([
+            "-hide_banner",
+            "-nostats",
+            "-loglevel",
+            "error",
+            "-hwaccel",
+            "auto",
+            "-threads",
+            "0",
+        ]);
         if seek_ms > 0 {
             let ss = format!("{:.3}", seek_ms as f64 / 1000.0);
             cmd.args(["-ss", &ss]);
         }
-        let scale_vf = format!("scale={dec_w}:{dec_h}:flags=bilinear");
+        let target_fps = fps.clamp(1.0, 120.0);
+        let scale_vf = format!("fps=fps={target_fps:.3},scale={dec_w}:{dec_h}:flags=fast_bilinear");
         cmd.args([
             "-i",
             &path,
@@ -1640,7 +1683,7 @@ fn spawn_ffmpeg_video_thread(
             "-vf",
             &scale_vf,
             "-pix_fmt",
-            "bgr0",
+            "bgra",
             "-f",
             "rawvideo",
             "pipe:1",
@@ -1659,24 +1702,35 @@ fn spawn_ffmpeg_video_thread(
             }
         };
 
-        let Some(mut stdout) = child.stdout.take() else {
+        // Drain stderr asynchronously so FFmpeg never blocks on pipe buffer
+        let stderr_handle = child.stderr.take().map(|se| {
+            thread::spawn(move || {
+                let mut err_buf = Vec::new();
+                let _ = se.take(4096).read_to_end(&mut err_buf);
+                String::from_utf8_lossy(&err_buf).trim().to_string()
+            })
+        });
+
+        let Some(stdout_raw) = child.stdout.take() else {
             let _ = child.kill();
             let _ = child.wait();
             video_eof.store(true, Ordering::Release);
             return;
         };
+        let mut stdout = BufReader::with_capacity(512 * 1024, stdout_raw);
 
-        let frame_bytes = (dec_w as usize) * (dec_h as usize) * 4;
+        let pixel_count = (dec_w as usize) * (dec_h as usize);
+        let frame_bytes = pixel_count * 4;
         let mut raw = vec![0u8; frame_bytes];
         let mut frame_idx: u64 = 0;
-        let frame_ms = 1000.0 / (fps.max(1.0) as f64);
+        let frame_ms = 1000.0 / (target_fps as f64);
 
         loop {
             if gen.load(Ordering::Acquire) != my_gen {
                 break;
             }
 
-            // Throttle video queue so memory stays lightweight
+            // Throttle video queue so memory stays lightweight (~1s lookahead)
             loop {
                 if gen.load(Ordering::Acquire) != my_gen {
                     let _ = child.kill();
@@ -1687,55 +1741,49 @@ fn spawn_ffmpeg_video_thread(
                 if qlen < VIDEO_QUEUE_MAX_FRAMES {
                     break;
                 }
-                thread::sleep(Duration::from_millis(6));
+                thread::sleep(Duration::from_millis(4));
             }
 
-            let mut filled = 0usize;
-            let mut eof = false;
-            while filled < frame_bytes {
-                match stdout.read(&mut raw[filled..]) {
-                    Ok(0) => {
-                        eof = true;
-                        break;
-                    }
-                    Ok(n) => filled += n,
-                    Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-                    Err(_) => {
-                        eof = true;
-                        break;
-                    }
-                }
-            }
-            if eof || filled < frame_bytes {
+            if stdout.read_exact(&mut raw).is_err() {
                 break;
             }
 
-            let mut buf = Vec::with_capacity(dec_w as usize * dec_h as usize);
+            let mut buf = frame_pool
+                .lock()
+                .ok()
+                .and_then(|mut p| p.pop())
+                .unwrap_or_else(|| Vec::with_capacity(pixel_count));
+            buf.clear();
+            if buf.capacity() < pixel_count {
+                buf.reserve(pixel_count - buf.capacity());
+            }
             for px in raw.chunks_exact(4) {
-                // bgr0 in memory: [B, G, R, 0] -> 0xFFRRGGBB
-                buf.push(0xFF000000 | ((px[2] as u32) << 16) | ((px[1] as u32) << 8) | (px[0] as u32));
+                // bgra in memory: [B, G, R, A] -> 0xFFRRGGBB little-endian
+                buf.push(u32::from_le_bytes([px[0], px[1], px[2], 0xFF]));
             }
 
-            let ts = seek_ms + ((frame_idx as f64 * frame_ms) / speed.max(0.25) as f64 * speed as f64) as u64;
+            let ts = seek_ms + (frame_idx as f64 * frame_ms) as u64;
             frame_idx += 1;
 
             if let Ok(mut q) = video_queue.lock() {
-                q.push_back(VideoFrame {
+                q.push_back(Arc::new(VideoFrame {
                     width: dec_w,
                     height: dec_h,
                     timestamp_ms: ts,
                     buffer: buf,
-                });
+                }));
             }
         }
 
         let _ = child.kill();
-        if let Ok(output) = child.wait_with_output() {
-            if frame_idx == 0 && !output.stderr.is_empty() {
-                let msg = String::from_utf8_lossy(&output.stderr).trim().to_string();
-                if !msg.is_empty() {
-                    if let Ok(mut er) = last_error.lock() {
-                        *er = Some(msg);
+        let _ = child.wait();
+        if frame_idx == 0 {
+            if let Some(h) = stderr_handle {
+                if let Ok(msg) = h.join() {
+                    if !msg.is_empty() {
+                        if let Ok(mut er) = last_error.lock() {
+                            *er = Some(msg);
+                        }
                     }
                 }
             }
@@ -1750,7 +1798,7 @@ fn spawn_ffmpeg_video_thread(
 fn spawn_pure_rust_h264_thread(
     path: String,
     seek_ms: u64,
-    video_queue: Arc<Mutex<VecDeque<VideoFrame>>>,
+    video_queue: Arc<Mutex<VecDeque<Arc<VideoFrame>>>>,
     video_eof: Arc<AtomicBool>,
     gen: Arc<AtomicU64>,
     my_gen: u64,
@@ -1772,7 +1820,7 @@ fn spawn_pure_rust_h264_thread(
 fn run_pure_rust_h264(
     path: &str,
     seek_ms: u64,
-    video_queue: &Mutex<VecDeque<VideoFrame>>,
+    video_queue: &Mutex<VecDeque<Arc<VideoFrame>>>,
     gen: &AtomicU64,
     my_gen: u64,
 ) -> Result<(), String> {
@@ -1860,7 +1908,7 @@ fn run_pure_rust_h264(
             }
             let frame = yuv420_to_xrgb(yuv.width, yuv.height, &yuv.y, &yuv.u, &yuv.v, ts_ms);
             if let Ok(mut q) = video_queue.lock() {
-                q.push_back(frame);
+                q.push_back(Arc::new(frame));
             }
         }
     }

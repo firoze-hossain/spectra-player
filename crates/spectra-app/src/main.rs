@@ -237,6 +237,8 @@ struct SpectraDesktopApp {
     mouse_down: bool,
     modifiers: ModifiersState,
     last_tick: Instant,
+    tick_rem_ns: u128,
+    next_redraw_at: Instant,
     last_title: String,
     _audio: Option<audio_out::AudioOutputHandle>,
 }
@@ -250,6 +252,7 @@ impl SpectraDesktopApp {
         } else {
             println!("[Spectra] Audio Output: Silent fallback (no OS audio device)");
         }
+        let now = Instant::now();
         Self {
             view: shared,
             window: None,
@@ -261,7 +264,9 @@ impl SpectraDesktopApp {
             mouse_y: 0,
             mouse_down: false,
             modifiers: ModifiersState::empty(),
-            last_tick: Instant::now(),
+            last_tick: now,
+            tick_rem_ns: 0,
+            next_redraw_at: now,
             last_title: String::new(),
             _audio: audio,
         }
@@ -593,8 +598,10 @@ impl ApplicationHandler for SpectraDesktopApp {
             }
             WindowEvent::RedrawRequested => {
                 let now = Instant::now();
-                let delta_ms = now.duration_since(self.last_tick).as_millis().max(1) as u64;
+                let elapsed_ns = now.duration_since(self.last_tick).as_nanos() + self.tick_rem_ns;
                 self.last_tick = now;
+                let delta_ms = (elapsed_ns / 1_000_000) as u64;
+                self.tick_rem_ns = elapsed_ns % 1_000_000;
 
                 let title_now = {
                     let mut v = self.view.lock().unwrap();
@@ -632,10 +639,15 @@ impl ApplicationHandler for SpectraDesktopApp {
 
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         self.process_ui_commands(event_loop);
-        if let Some(ref win) = self.window {
-            win.request_redraw();
+        let now = Instant::now();
+        let frame_step = Duration::from_micros(16_667);
+        if now >= self.next_redraw_at {
+            self.next_redraw_at = (self.next_redraw_at + frame_step).max(now + Duration::from_millis(2));
+            if let Some(ref win) = self.window {
+                win.request_redraw();
+            }
         }
-        event_loop.set_control_flow(ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(16)));
+        event_loop.set_control_flow(ControlFlow::WaitUntil(self.next_redraw_at));
     }
 }
 
