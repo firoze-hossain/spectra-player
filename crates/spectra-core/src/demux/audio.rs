@@ -32,6 +32,7 @@ impl AudioDemuxResult {
             sample_rate: self.sample_rate,
             channels: self.channels,
             fps: 0.0,
+            ..MediaMetadata::default()
         }
     }
 }

@@ -1,7 +1,7 @@
-//! # Nova Player UI Engine
+//! # Spectra UI Engine
 //!
-//! Modern acrylic UI, hardware-agnostic software rasterizer, 32-band audio visualizers,
-//! video scaler, and interactive transport controls for Nova Player.
+//! Hardware-agnostic modern acrylic UI, software rasterizer, real-time audio visualizers,
+//! video scaler, effects studio, and interactive VLC-grade transport controls.
 
 pub mod components;
 pub mod draw;
@@ -13,9 +13,9 @@ pub mod scaler;
 pub use draw::{draw_circle, draw_line, draw_rect_outline, fill_rect, fill_rounded_rect};
 pub use font::{draw_char, draw_text, measure_text};
 pub use geom::{Color, Rect};
-pub use player::SpectraPlayerView;
+pub use player::{SpectraPlayerView, UiCommand};
 pub type NovaPlayerView = SpectraPlayerView;
-pub use scaler::{blit_video_frame, compute_viewport_rect};
+pub use scaler::{blit_video_frame, compute_viewport_rect, compute_viewport_rect_zoom};
 
 #[cfg(test)]
 mod tests {
@@ -24,14 +24,12 @@ mod tests {
 
     #[test]
     fn test_viewport_aspect_ratio_computation() {
-        // 16:9 on 1024x768 screen -> letterbox (top/bottom bars)
         let vp = compute_viewport_rect(1024, 768, AspectRatio::Ratio16_9, 1920, 1080);
         assert_eq!(vp.w, 1024);
         assert_eq!(vp.h, 576);
         assert_eq!(vp.x, 0);
         assert_eq!(vp.y, (768 - 576) / 2);
 
-        // 16:9 on ultra-wide 1920x800 screen -> pillarbox (left/right bars)
         let vp2 = compute_viewport_rect(1920, 800, AspectRatio::Ratio16_9, 1920, 1080);
         assert_eq!(vp2.h, 800);
         assert_eq!(vp2.w, (800.0 * 16.0 / 9.0) as i32);
@@ -42,19 +40,29 @@ mod tests {
         let mut view = SpectraPlayerView::new();
         let mut surface = vec![0u32; 1024 * 720];
 
-        // Render full frame
         view.render(&mut surface, 1024, 720);
-
-        // Verify non-empty surface pixels
         assert!(surface.iter().any(|&p| p != 0));
+        assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Stopped);
 
-        // Click on play/pause button
+        // Standby "Open File" stage button should request native file dialog
+        let open_btn = view.idle_areas.as_ref().unwrap().open_file_btn;
+        assert!(view.handle_click(open_btn.x + 8, open_btn.y + 8, 1024, 720));
+        assert_eq!(view.take_commands(), vec![UiCommand::OpenFileDialog]);
+
+        // After loading media, Play/Pause toggles cleanly
+        let mp4_bytes = [
+            0x00, 0x00, 0x00, 0x14, b'f', b't', b'y', b'p', b'i', b's', b'o', b'm',
+            0x00, 0x00, 0x02, 0x00, b'm', b'p', b'4', b'1',
+        ];
+        view.engine.load_file("clip.mp4", &mp4_bytes);
+        view.render(&mut surface, 1024, 720);
+        assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Playing);
+
         let play_btn = view.bottom_areas.unwrap().play_pause_btn;
         let clicked = view.handle_click(play_btn.x + 5, play_btn.y + 5, 1024, 720);
         assert!(clicked);
         assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Paused);
 
-        // Click again to resume
         view.handle_click(play_btn.x + 5, play_btn.y + 5, 1024, 720);
         assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Playing);
     }
@@ -66,12 +74,10 @@ mod tests {
 
         view.render(&mut surface, 800, 600);
 
-        // Click playlist button in top bar
         let pl_btn = view.top_areas.unwrap().playlist_btn;
         view.handle_click(pl_btn.x + 4, pl_btn.y + 4, 800, 600);
         assert!(view.show_playlist);
 
-        // Click info button in top bar
         let info_btn = view.top_areas.unwrap().info_btn;
         view.handle_click(info_btn.x + 4, info_btn.y + 4, 800, 600);
         assert!(view.show_info);
@@ -84,11 +90,11 @@ mod tests {
 
         view.render(&mut surface, 1024, 720);
 
-        // 1. Click "Media" (Menu 0) in top bar
+        // 1. Click "Media" (Menu 0)
         view.handle_click(12, 10, 1024, 720);
         assert_eq!(view.menubar_state.active_menu, Some(0));
 
-        // 2. Hover over "Playback" (Menu 1) switches menu automatically
+        // 2. Hover over "Playback" (Menu 1)
         view.handle_mouse_move(65, 10, false, 1024, 720);
         assert_eq!(view.menubar_state.active_menu, Some(1));
 
@@ -101,18 +107,19 @@ mod tests {
         view.handle_click(help_rect.x + 5, help_rect.y + 5, 1024, 720);
         assert_eq!(view.menubar_state.active_menu, Some(7));
 
-        // 5. Click "About Spectra..." (item 0 in Help dropdown: y: 24 + 4 + 10)
-        view.handle_click(help_rect.x + 20, 24 + 12, 1024, 720);
+        // 5. Click "About Spectra..."
+        let menu_x = help_rect.x.min(1024 - 256);
+        view.handle_click(menu_x + 20, 24 + 12, 1024, 720);
         assert!(view.show_about, "Clicking About Spectra should open modal dialog");
-        assert_eq!(view.menubar_state.active_menu, None, "Executing menu action should close dropdown");
+        assert_eq!(view.menubar_state.active_menu, None);
 
         // 6. Close About dialog
         view.render(&mut surface, 1024, 720);
         let close_btn = view.about_close_btn.unwrap();
         view.handle_click(close_btn.x + 5, close_btn.y + 5, 1024, 720);
-        assert!(!view.show_about, "Clicking close on dialog should dismiss it");
+        assert!(!view.show_about);
 
-        // 7. Test Bottom Bar VLC controls: Stop, Loop, Shuffle, Fullscreen
+        // 7. Bottom bar VLC controls: Stop, Loop, Shuffle, Fullscreen, Effects
         let btm = view.bottom_areas.unwrap();
         view.handle_click(btm.stop_btn.x + 5, btm.stop_btn.y + 5, 1024, 720);
         assert_eq!(view.engine.state, spectra_core::types::PlaybackState::Stopped);
@@ -125,5 +132,8 @@ mod tests {
 
         view.handle_click(btm.fullscreen_btn.x + 5, btm.fullscreen_btn.y + 5, 1024, 720);
         assert!(view.is_fullscreen);
+
+        view.handle_click(btm.effects_eq_btn.x + 5, btm.effects_eq_btn.y + 5, 1024, 720);
+        assert!(view.show_effects);
     }
 }

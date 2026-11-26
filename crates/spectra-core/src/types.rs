@@ -1,4 +1,4 @@
-//! Core data types and metadata definitions for Nova Player.
+//! Core data types and metadata definitions for Spectra Media Studio.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MediaFormat {
@@ -7,11 +7,24 @@ pub enum MediaFormat {
     Webm,
     Avi,
     Mov,
+    Flv,
+    Ts,
+    Mpeg,
+    Wmv,
+    ThreeGp,
+    Ogv,
     Wav,
     Mp3,
     Flac,
     Aac,
+    M4a,
     Ogg,
+    Opus,
+    Wma,
+    Alac,
+    Aiff,
+    Ac3,
+    NetworkStream,
     Unknown,
 }
 
@@ -23,12 +36,25 @@ impl MediaFormat {
             MediaFormat::Webm => "WebM (Open Web Media)",
             MediaFormat::Avi => "AVI (Audio Video Interleave)",
             MediaFormat::Mov => "MOV (Apple QuickTime)",
+            MediaFormat::Flv => "FLV (Flash Video)",
+            MediaFormat::Ts => "MPEG-TS (Transport Stream)",
+            MediaFormat::Mpeg => "MPEG-PS / VOB Video",
+            MediaFormat::Wmv => "WMV / ASF Media",
+            MediaFormat::ThreeGp => "3GP Mobile Video",
+            MediaFormat::Ogv => "OGV (Ogg Theora Video)",
             MediaFormat::Wav => "WAV (Waveform Audio)",
             MediaFormat::Mp3 => "MP3 (MPEG Audio Layer III)",
             MediaFormat::Flac => "FLAC (Free Lossless Audio)",
             MediaFormat::Aac => "AAC (Advanced Audio Coding)",
+            MediaFormat::M4a => "M4A (MPEG-4 Audio)",
             MediaFormat::Ogg => "OGG (Vorbis Audio)",
-            MediaFormat::Unknown => "Unknown Media Format",
+            MediaFormat::Opus => "Opus Interactive Audio",
+            MediaFormat::Wma => "WMA (Windows Media Audio)",
+            MediaFormat::Alac => "ALAC (Apple Lossless)",
+            MediaFormat::Aiff => "AIFF (Audio Interchange)",
+            MediaFormat::Ac3 => "AC3 / E-AC3 Dolby Audio",
+            MediaFormat::NetworkStream => "Network Media Stream",
+            MediaFormat::Unknown => "Media Container",
         }
     }
 
@@ -39,11 +65,24 @@ impl MediaFormat {
             MediaFormat::Webm => "WEBM",
             MediaFormat::Avi => "AVI",
             MediaFormat::Mov => "MOV",
+            MediaFormat::Flv => "FLV",
+            MediaFormat::Ts => "TS",
+            MediaFormat::Mpeg => "MPG",
+            MediaFormat::Wmv => "WMV",
+            MediaFormat::ThreeGp => "3GP",
+            MediaFormat::Ogv => "OGV",
             MediaFormat::Wav => "WAV",
             MediaFormat::Mp3 => "MP3",
             MediaFormat::Flac => "FLAC",
             MediaFormat::Aac => "AAC",
+            MediaFormat::M4a => "M4A",
             MediaFormat::Ogg => "OGG",
+            MediaFormat::Opus => "OPUS",
+            MediaFormat::Wma => "WMA",
+            MediaFormat::Alac => "ALAC",
+            MediaFormat::Aiff => "AIFF",
+            MediaFormat::Ac3 => "AC3",
+            MediaFormat::NetworkStream => "NET",
             MediaFormat::Unknown => "MEDIA",
         }
     }
@@ -51,7 +90,17 @@ impl MediaFormat {
     pub fn is_audio_only(&self) -> bool {
         matches!(
             self,
-            MediaFormat::Wav | MediaFormat::Mp3 | MediaFormat::Flac | MediaFormat::Aac | MediaFormat::Ogg
+            MediaFormat::Wav
+                | MediaFormat::Mp3
+                | MediaFormat::Flac
+                | MediaFormat::Aac
+                | MediaFormat::M4a
+                | MediaFormat::Ogg
+                | MediaFormat::Opus
+                | MediaFormat::Wma
+                | MediaFormat::Alac
+                | MediaFormat::Aiff
+                | MediaFormat::Ac3
         )
     }
 }
@@ -81,9 +130,70 @@ impl AspectRatio {
             AspectRatio::Auto => "Auto",
             AspectRatio::Ratio16_9 => "16:9",
             AspectRatio::Ratio4_3 => "4:3",
-            AspectRatio::Ratio21_9 => "21:9 (Ultrawide)",
+            AspectRatio::Ratio21_9 => "21:9",
             AspectRatio::Ratio1_1 => "1:1",
-            AspectRatio::Fill => "Fill / Stretch",
+            AspectRatio::Fill => "Fill",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CropMode {
+    None,
+    Ratio16_9,
+    Ratio4_3,
+    Ratio21_9,
+    Ratio1_1,
+}
+
+impl CropMode {
+    pub fn name(&self) -> &'static str {
+        match self {
+            CropMode::None => "No Crop",
+            CropMode::Ratio16_9 => "Crop 16:9",
+            CropMode::Ratio4_3 => "Crop 4:3",
+            CropMode::Ratio21_9 => "Crop 21:9",
+            CropMode::Ratio1_1 => "Crop 1:1",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioVisualizerMode {
+    Off,
+    Spectrum32,
+    Waveform,
+    VinylTurntable,
+}
+
+impl AudioVisualizerMode {
+    pub fn name(&self) -> &'static str {
+        match self {
+            AudioVisualizerMode::Off => "Off",
+            AudioVisualizerMode::Spectrum32 => "32-Band FFT Spectrum",
+            AudioVisualizerMode::Waveform => "Oscilloscope Waveform",
+            AudioVisualizerMode::VinylTurntable => "Vinyl Turntable",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DecoderBackend {
+    Synthesizer,
+    PureRustSymphonia,
+    PureRustH264,
+    FfmpegUniversal,
+    HybridSymphoniaFfmpeg,
+}
+
+impl DecoderBackend {
+    pub fn name(&self) -> &'static str {
+        match self {
+            DecoderBackend::Synthesizer => "Standby / Ready",
+            DecoderBackend::PureRustSymphonia => "Pure-Rust Symphonia Audio",
+            DecoderBackend::PureRustH264 => "Pure-Rust H.264 + Symphonia",
+            DecoderBackend::FfmpegUniversal => "FFmpeg Universal A/V Engine",
+            DecoderBackend::HybridSymphoniaFfmpeg => "FFmpeg Video + Symphonia Audio",
         }
     }
 }
@@ -126,6 +236,8 @@ impl Resolution {
                     "2K QHD"
                 } else if *w >= 1800 {
                     "1080p FHD"
+                } else if *w >= 1200 {
+                    "720p HD"
                 } else {
                     "SD/HD"
                 }
@@ -139,24 +251,43 @@ pub struct VideoFrame {
     pub width: u32,
     pub height: u32,
     pub timestamp_ms: u64,
-    /// 32-bit XRGB frame pixels (0x00RRGGBB)
+    /// 32-bit XRGB frame pixels (0xFFRRGGBB)
     pub buffer: Vec<u32>,
 }
 
 impl VideoFrame {
     pub fn new(width: u32, height: u32, timestamp_ms: u64) -> Self {
-        let size = (width * height) as usize;
+        let size = (width as usize).saturating_mul(height as usize);
         Self {
             width,
             height,
             timestamp_ms,
-            buffer: vec![0xFF0F172A; size], // Default dark slate
+            buffer: vec![0xFF0F172A; size],
         }
     }
 }
 
 #[derive(Debug, Clone)]
+pub struct StreamTrackInfo {
+    pub index: usize,
+    pub stream_index: usize,
+    pub codec: String,
+    pub language: String,
+    pub title: String,
+    pub channels: u8,
+    pub sample_rate: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct CoverArt {
+    pub width: u32,
+    pub height: u32,
+    pub pixels: Vec<u32>,
+}
+
+#[derive(Debug, Clone)]
 pub struct MediaMetadata {
+    pub path: String,
     pub title: String,
     pub artist: String,
     pub album: String,
@@ -166,28 +297,41 @@ pub struct MediaMetadata {
     pub height: u32,
     pub video_codec: String,
     pub audio_codec: String,
+    pub pixel_format: String,
     pub bitrate_kbps: u32,
     pub sample_rate: u32,
     pub channels: u8,
     pub fps: f32,
+    pub is_live_file: bool,
+    pub backend: DecoderBackend,
+    pub audio_tracks: Vec<StreamTrackInfo>,
+    pub subtitle_tracks: Vec<StreamTrackInfo>,
+    pub cover_art: Option<CoverArt>,
 }
 
 impl Default for MediaMetadata {
     fn default() -> Self {
         Self {
-            title: "NovaOS High-Fidelity 4K Demo".to_string(),
-            artist: "Nova Media Studio".to_string(),
-            album: "NovaOS Enterprise Media Suite".to_string(),
-            format: MediaFormat::Mkv,
-            duration_ms: 180_000, // 3 minutes
-            width: 3840,
-            height: 2160,
-            video_codec: "H.264 / AVC High Profile (4K UHD)".to_string(),
-            audio_codec: "FLAC 24-bit 96kHz Lossless".to_string(),
-            bitrate_kbps: 45000,
+            path: String::new(),
+            title: "Spectra Media Studio".to_string(),
+            artist: "Open a file, folder, or stream URL".to_string(),
+            album: String::new(),
+            format: MediaFormat::Unknown,
+            duration_ms: 0,
+            width: 0,
+            height: 0,
+            video_codec: "None".to_string(),
+            audio_codec: "None".to_string(),
+            pixel_format: String::new(),
+            bitrate_kbps: 0,
             sample_rate: 48000,
             channels: 2,
-            fps: 60.0,
+            fps: 0.0,
+            is_live_file: false,
+            backend: DecoderBackend::Synthesizer,
+            audio_tracks: Vec::new(),
+            subtitle_tracks: Vec::new(),
+            cover_art: None,
         }
     }
 }
@@ -202,6 +346,7 @@ pub enum EqualizerPreset {
     Vocal,
     Techno,
     NovaAcoustic,
+    Custom,
 }
 
 impl EqualizerPreset {
@@ -215,13 +360,14 @@ impl EqualizerPreset {
             EqualizerPreset::Vocal => "Vocal Clarity",
             EqualizerPreset::Techno => "Techno / Electronic",
             EqualizerPreset::NovaAcoustic => "Nova Acoustic Studio",
+            EqualizerPreset::Custom => "Custom",
         }
     }
 
     /// 8 frequency bands gains in dB: [64Hz, 125Hz, 250Hz, 500Hz, 1kHz, 2kHz, 4kHz, 8kHz]
     pub fn gains_db(&self) -> [f32; 8] {
         match self {
-            EqualizerPreset::Flat => [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            EqualizerPreset::Flat | EqualizerPreset::Custom => [0.0; 8],
             EqualizerPreset::Rock => [4.5, 3.0, -1.0, -2.0, 1.0, 2.5, 4.0, 5.0],
             EqualizerPreset::Pop => [-1.0, 1.5, 3.0, 4.0, 3.5, 1.0, -1.0, -1.5],
             EqualizerPreset::Classical => [4.0, 3.0, 2.0, 1.5, -1.0, 1.5, 3.0, 3.5],
@@ -229,6 +375,21 @@ impl EqualizerPreset {
             EqualizerPreset::Vocal => [-2.0, -1.0, 1.0, 3.5, 4.0, 3.5, 1.5, 0.0],
             EqualizerPreset::Techno => [5.5, 4.5, 0.0, -2.0, -1.5, 0.0, 4.0, 5.5],
             EqualizerPreset::NovaAcoustic => [3.0, 2.0, 1.0, 0.0, 2.0, 3.5, 4.5, 4.0],
+        }
+    }
+
+    /// 10-band VLC-style graphic equalizer gains in dB:
+    /// [60Hz, 170Hz, 310Hz, 600Hz, 1kHz, 3kHz, 6kHz, 12kHz, 14kHz, 16kHz]
+    pub fn gains_db_10(&self) -> [f32; 10] {
+        match self {
+            EqualizerPreset::Flat | EqualizerPreset::Custom => [0.0; 10],
+            EqualizerPreset::Rock => [4.8, 3.4, -2.0, -3.5, -1.5, 2.2, 4.5, 5.5, 5.5, 5.0],
+            EqualizerPreset::Pop => [-1.2, 2.4, 4.0, 4.2, 2.8, -0.5, -1.5, -1.5, -1.0, -1.0],
+            EqualizerPreset::Classical => [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, -3.0, -3.0, -3.0, -4.5],
+            EqualizerPreset::BassBoost => [7.5, 6.5, 4.5, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+            EqualizerPreset::Vocal => [-2.5, -1.5, 0.5, 3.5, 4.5, 4.0, 2.0, 0.0, -0.5, -1.0],
+            EqualizerPreset::Techno => [5.5, 4.5, 0.5, -2.5, -2.0, 0.5, 4.0, 5.5, 5.5, 4.5],
+            EqualizerPreset::NovaAcoustic => [3.0, 2.2, 1.0, 0.0, 1.5, 3.0, 4.0, 4.2, 3.5, 2.5],
         }
     }
 }

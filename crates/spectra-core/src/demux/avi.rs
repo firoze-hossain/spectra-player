@@ -83,6 +83,7 @@ impl AviDemuxer {
             sample_rate: 44100,
             channels: 2,
             fps,
+            ..MediaMetadata::default()
         }
     }
 }

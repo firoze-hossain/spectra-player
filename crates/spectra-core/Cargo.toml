@@ -9,6 +9,21 @@ repository = "https://github.com/firoze-hossain/spectra-player"
 
 [features]
 default = ["std"]
-std = []
+std = [
+    "dep:symphonia",
+    "dep:symphonia-core",
+    "dep:symphonia-opus",
+    "dep:rusty_h264-decoder",
+    "dep:mp4",
+    "dep:ffmpeg-sidecar",
+    "dep:image",
+]
 
 [dependencies]
+symphonia = { version = "0.6.1", features = ["all"], optional = true }
+symphonia-core = { version = "0.6.1", optional = true }
+symphonia-opus = { version = "0.1.3", optional = true }
+rusty_h264-decoder = { version = "0.17.4", optional = true }
+mp4 = { version = "0.14.0", optional = true }
+ffmpeg-sidecar = { version = "2.7.0", optional = true }
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "bmp", "webp", "gif"], optional = true }

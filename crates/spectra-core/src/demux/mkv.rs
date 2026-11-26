@@ -102,6 +102,7 @@ impl MkvDemuxer {
             sample_rate: self.sample_rate,
             channels: self.channels,
             fps: 60.0,
+            ..MediaMetadata::default()
         }
     }
 }
